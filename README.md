@@ -1,24 +1,36 @@
-# Kindred Connect
+# INSTRUMENTAÇÃO — Astra Foods
 
-.
+Sistema base reconstruído a partir do projeto Kindred Connect para gestão de instrumentação, calibração e metrologia.
 
-This project was built with [Lovable](https://lovable.dev).
+## O que esta versão resolve
 
-## Build with Lovable
+- Remove a página inicial de tela branca.
+- A rota inicial `/` renderiza o Dashboard diretamente.
+- Não há leitura de `localStorage` durante a renderização SSR.
+- Navegação entre módulos acontece imediatamente no cliente.
+- A interface foi estruturada para carregamento assíncrono de dados sem bloquear a troca de módulo.
+- Inclui estrutura visual dos módulos de Instrumentação.
+- Inclui tabela inicial de instrumentos e busca global local.
+- Inclui estados visuais para calibrado, a vencer e vencido.
+- Inclui tratamento de erro da aplicação.
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/5becbe44-fc57-41e2-9d4e-90a85246e8f3).
+## Módulos
 
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
+Dashboard, Instrumentos, Calibração, Padrões, Certificados, Manutenção, Não Conformidades, Movimentações, Indicadores, Relatórios, Documentos, Alertas, Inteligência e Configurações.
 
-## Development
+## Próxima etapa
 
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+Conectar os módulos a banco de dados/API e implementar CRUDs, autenticação, histórico, cálculos metrológicos, certificados, manutenção, NCs, relatórios e permissões.
 
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+## Execução
+
+```bash
+npm install
 npm run dev
+```
+
+Para produção:
+
+```bash
+npm run build
 ```
