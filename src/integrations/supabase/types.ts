@@ -14,7 +14,173 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      alert_preferences: {
+        Row: {
+          days_before: number[]
+          push_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          days_before?: number[]
+          push_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          days_before?: number[]
+          push_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      calibrations: {
+        Row: {
+          calibration_date: string
+          created_at: string
+          created_by: string | null
+          id: string
+          instrument_id: string | null
+          instrument_label: string
+          next_date: string | null
+          result: string
+          technician: string | null
+        }
+        Insert: {
+          calibration_date: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          instrument_id?: string | null
+          instrument_label: string
+          next_date?: string | null
+          result?: string
+          technician?: string | null
+        }
+        Update: {
+          calibration_date?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          instrument_id?: string | null
+          instrument_label?: string
+          next_date?: string | null
+          result?: string
+          technician?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calibrations_instrument_id_fkey"
+            columns: ["instrument_id"]
+            isOneToOne: false
+            referencedRelation: "instruments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      instruments: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          next_calibration: string | null
+          sector: string | null
+          status: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          next_calibration?: string | null
+          sector?: string | null
+          status?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          next_calibration?: string | null
+          sector?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
+      notification_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          dedupe_key: string | null
+          due_date: string | null
+          id: string
+          instrument_id: string | null
+          message: string
+          sent_at: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          dedupe_key?: string | null
+          due_date?: string | null
+          id?: string
+          instrument_id?: string | null
+          message: string
+          sent_at?: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          dedupe_key?: string | null
+          due_date?: string | null
+          id?: string
+          instrument_id?: string | null
+          message?: string
+          sent_at?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
