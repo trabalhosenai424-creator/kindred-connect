@@ -68,11 +68,20 @@ export async function subscribeCurrentUserToPush() {
 export async function ensurePushSubscription() {
   if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
   await registerPushServiceWorker();
-  if (Notification.permission !== "granted") return;
   if (!VAPID_PUBLIC_KEY) return;
-  try {
-    await subscribeCurrentUserToPush();
-  } catch (error) {
-    console.warn("[Push] assinatura não sincronizada:", error);
-  }
+
+  const sync = async () => {
+    if (Notification.permission !== "granted") return;
+    try {
+      await subscribeCurrentUserToPush();
+    } catch (error) {
+      console.warn("[Push] assinatura não sincronizada:", error);
+    }
+  };
+
+  await sync();
+  // The existing Alertas screen requests browser permission. Poll briefly so
+  // granting that permission immediately creates the Web Push subscription.
+  const timer = window.setInterval(() => void sync(), 2000);
+  window.setTimeout(() => window.clearInterval(timer), 120000);
 }
