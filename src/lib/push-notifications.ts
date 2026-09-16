@@ -1,6 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
-const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
+const VAPID_PUBLIC_KEY = import.meta.env["VITE_VAPID_PUBLIC_KEY"] as string | undefined;
 
 function urlBase64ToUint8Array(value: string) {
   const padding = "=".repeat((4 - (value.length % 4)) % 4);
@@ -44,8 +44,8 @@ export async function subscribeCurrentUserToPush() {
 
   const json = subscription.toJSON();
   const endpoint = json.endpoint;
-  const p256dh = json.keys?.p256dh;
-  const auth = json.keys?.auth;
+  const p256dh = json.keys?.["p256dh"];
+  const auth = json.keys?.["auth"];
   if (!endpoint || !p256dh || !auth) throw new Error("O navegador não retornou uma assinatura Web Push válida.");
 
   const { error } = await (supabase as any)
