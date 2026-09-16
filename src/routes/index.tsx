@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Activity, AlertTriangle, BarChart3, Bell, Boxes, CalendarClock,
-  CheckCircle2, ClipboardCheck, FileText, Gauge, History,
-  LayoutDashboard, Settings, ShieldCheck, Wrench, Plus, Search
+  CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ClipboardCheck,
+  Download, FileText, Gauge, History, LayoutDashboard, Menu, Plus, Search,
+  Settings, ShieldCheck, Trash2, Wrench, X
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
@@ -14,79 +15,129 @@ export const Route = createFileRoute("/")({
   component: Index,
 });
 
-const modules = [
-  ["Dashboard", LayoutDashboard], ["Instrumentos", Gauge], ["Calibração", ClipboardCheck],
-  ["Padrões", ShieldCheck], ["Certificados", FileText], ["Manutenção", Wrench],
-  ["Não Conformidades", AlertTriangle], ["Movimentações", History], ["Indicadores", BarChart3],
-  ["Relatórios", Activity], ["Documentos", FileText], ["Alertas", Bell],
-] as const;
+type Instrument = { id: number; code: string; name: string; sector: string; status: "Ativo" | "Manutenção" | "Inativo"; nextCalibration: string };
+type Calibration = { id: number; instrument: string; date: string; result: "Aprovado" | "Reprovado"; nextDate: string; technician: string };
+type RecordItem = { id: number; title: string; status: string; date: string; detail: string };
 
-const descriptions: Record<string, string> = {
-  Dashboard: "Visão geral do sistema de Instrumentação.",
-  Instrumentos: "Cadastro, consulta e acompanhamento dos instrumentos.",
-  Calibração: "Registro e acompanhamento das calibrações.",
-  Padrões: "Controle dos padrões utilizados nas calibrações.",
-  Certificados: "Certificados e documentos de calibração.",
-  Manutenção: "Controle de manutenções e intervenções.",
-  "Não Conformidades": "Registro e tratamento de não conformidades.",
-  Movimentações: "Histórico de movimentações dos instrumentos.",
-  Indicadores: "Indicadores e métricas de desempenho.",
-  Relatórios: "Relatórios operacionais e gerenciais.",
-  Documentos: "Documentos relacionados à metrologia.",
-  Alertas: "Alertas e pendências que exigem atenção.",
-  Configurações: "Preferências e configurações do sistema.",
-};
+type Module = "Dashboard" | "Instrumentos" | "Calibração" | "Manutenção" | "Movimentações" | "Padrões" | "Certificados" | "Não Conformidades" | "Alertas" | "Indicadores" | "Relatórios" | "Documentos" | "Configurações";
+
+const groups: { title: string; items: [Module, typeof LayoutDashboard][] }[] = [
+  { title: "PRINCIPAL", items: [["Dashboard", LayoutDashboard]] },
+  { title: "GESTÃO", items: [["Instrumentos", Gauge], ["Calibração", ClipboardCheck], ["Manutenção", Wrench], ["Movimentações", History]] },
+  { title: "METROLOGIA", items: [["Padrões", ShieldCheck], ["Certificados", FileText]] },
+  { title: "QUALIDADE", items: [["Não Conformidades", AlertTriangle], ["Alertas", Bell]] },
+  { title: "ANÁLISES", items: [["Indicadores", BarChart3], ["Relatórios", Activity]] },
+  { title: "ARQUIVOS", items: [["Documentos", FileText]] },
+];
+
+const today = new Date().toISOString().slice(0, 10);
 
 function Index() {
-  const [active, setActive] = useState("Dashboard");
-  const [instruments, setInstruments] = useState<string[]>([]);
+  const [active, setActive] = useState<Module>("Dashboard");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ PRINCIPAL: true, GESTÃO: true, METROLOGIA: true, QUALIDADE: true, ANÁLISES: true, ARQUIVOS: true });
+  const [instruments, setInstruments] = useState<Instrument[]>([]);
+  const [calibrations, setCalibrations] = useState<Calibration[]>([]);
+  const [maintenance, setMaintenance] = useState<RecordItem[]>([]);
+  const [movements, setMovements] = useState<RecordItem[]>([]);
+  const [standards, setStandards] = useState<RecordItem[]>([]);
+  const [certificates, setCertificates] = useState<RecordItem[]>([]);
+  const [ncs, setNcs] = useState<RecordItem[]>([]);
+  const [documents, setDocuments] = useState<RecordItem[]>([]);
   const [search, setSearch] = useState("");
-  const [showForm, setShowForm] = useState(false);
-  const [name, setName] = useState("");
 
-  const addInstrument = () => {
-    if (!name.trim()) return;
-    setInstruments((items) => [...items, name.trim()]);
-    setName(""); setShowForm(false); setActive("Instrumentos");
-  };
+  const overdue = instruments.filter((x) => x.nextCalibration && x.nextCalibration < today).length;
+  const dueSoon = instruments.filter((x) => x.nextCalibration && x.nextCalibration >= today && x.nextCalibration <= new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10)).length;
+  const approved = calibrations.filter((x) => x.result === "Aprovado").length;
+  const pendingAlerts = overdue + certificates.filter((x) => x.status === "Vencendo").length + ncs.filter((x) => x.status !== "Concluída").length;
+
+  const navigate = (module: Module) => { setActive(module); setMobileOpen(false); };
+  const toggleGroup = (title: string) => setOpenGroups((v) => ({ ...v, [title]: !v[title] }));
 
   return <div className="min-h-screen bg-slate-950 text-slate-100">
-    <aside className="fixed inset-y-0 left-0 z-20 hidden w-64 border-r border-white/10 bg-slate-950 px-4 py-5 lg:block">
-      <div className="mb-8 flex items-center gap-3 px-2">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-blue-600"><Gauge className="h-5 w-5" /></div>
-        <div><div className="font-semibold tracking-tight">INSTRUMENTAÇÃO</div><div className="text-xs text-slate-500">Astra Foods</div></div>
+    <button className="fixed left-4 top-4 z-40 rounded-lg border border-white/10 bg-slate-900 p-2 lg:hidden" onClick={() => setMobileOpen(!mobileOpen)} aria-label="Abrir menu"><Menu className="h-5 w-5" /></button>
+    <aside className={`fixed inset-y-0 left-0 z-30 border-r border-white/10 bg-slate-950 transition-all duration-200 ${sidebarCollapsed ? "w-[76px]" : "w-64"} ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
+      <div className="flex h-full flex-col px-3 py-5">
+        <div className={`mb-6 flex items-center gap-3 px-2 ${sidebarCollapsed ? "justify-center" : ""}`}>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-blue-600"><Gauge className="h-5 w-5" /></div>
+          {!sidebarCollapsed && <div><div className="font-semibold tracking-tight">INSTRUMENTAÇÃO</div><div className="text-xs text-slate-500">Astra Foods</div></div>}
+        </div>
+        <nav className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+          {groups.map((group) => <div key={group.title}>
+            {!sidebarCollapsed && <button onClick={() => toggleGroup(group.title)} className="mb-1 flex w-full items-center justify-between px-3 py-1 text-[10px] font-semibold tracking-[0.14em] text-slate-600"><span>{group.title}</span><ChevronDown className={`h-3 w-3 transition ${openGroups[group.title] ? "" : "-rotate-90"}`} /></button>}
+            {(sidebarCollapsed || openGroups[group.title]) && <div className="space-y-0.5">{group.items.map(([label, Icon]) => <button key={label} title={sidebarCollapsed ? label : undefined} onClick={() => navigate(label)} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${active === label ? "bg-violet-600/15 text-white shadow-sm" : "text-slate-400 hover:bg-white/5 hover:text-white"} ${sidebarCollapsed ? "justify-center" : ""}`}><Icon className={`h-4 w-4 shrink-0 ${active === label ? "text-violet-400" : ""}`} />{!sidebarCollapsed && <span>{label}</span>}</button>)}</div>}
+          </div>)}
+        </nav>
+        <div className="mt-3 border-t border-white/10 pt-3 space-y-1">
+          <button title={sidebarCollapsed ? "Configurações" : undefined} onClick={() => navigate("Configurações")} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm ${active === "Configurações" ? "bg-violet-600/15 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"} ${sidebarCollapsed ? "justify-center" : ""}`}><Settings className="h-4 w-4" />{!sidebarCollapsed && "Configurações"}</button>
+          <button title={sidebarCollapsed ? "Recolher menu" : "Menu compacto"} onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className={`hidden w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-500 hover:bg-white/5 hover:text-white lg:flex ${sidebarCollapsed ? "justify-center" : ""}`}>{sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <><ChevronLeft className="h-4 w-4" />Recolher menu</>}</button>
+        </div>
       </div>
-      <nav className="space-y-1">
-        {modules.map(([label, Icon]) => <button key={label} onClick={() => setActive(label)} className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${active === label ? "bg-violet-600/20 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><Icon className="h-4 w-4"/><span>{label}</span></button>)}
-      </nav>
-      <button onClick={() => setActive("Configurações")} className={`absolute bottom-5 left-4 right-4 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm ${active === "Configurações" ? "bg-violet-600/20 text-white" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><Settings className="h-4 w-4"/>Configurações</button>
     </aside>
 
-    <main className="lg:pl-64">
-      <header className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/90 px-6 py-4 backdrop-blur-xl">
-        <div className="flex items-center justify-between gap-4"><div><p className="text-sm text-slate-500">Instrumentação / {active}</p><h1 className="text-2xl font-semibold tracking-tight">{active}</h1></div><div className="hidden items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-400 sm:flex"><CalendarClock className="h-4 w-4"/>Hoje</div></div>
+    <main className={`transition-all duration-200 ${sidebarCollapsed ? "lg:pl-[76px]" : "lg:pl-64"}`}>
+      <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/90 px-6 py-4 backdrop-blur-xl lg:px-8">
+        <div className="flex items-center justify-between gap-4 pl-10 lg:pl-0"><div><p className="text-xs text-slate-500">Instrumentação / {active}</p><h1 className="mt-0.5 text-xl font-semibold tracking-tight">{active}</h1></div><div className="hidden items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-400 sm:flex"><CalendarClock className="h-4 w-4" />{new Date().toLocaleDateString("pt-BR")}</div></div>
       </header>
-
-      <section className="space-y-6 p-6 lg:p-8">
-        {active === "Dashboard" ? <Dashboard instruments={instruments} /> : active === "Instrumentos" ? <Instrumentos instruments={instruments} showForm={showForm} setShowForm={setShowForm} name={name} setName={setName} addInstrument={addInstrument} search={search} setSearch={setSearch} /> : <ModulePage title={active} description={descriptions[active] ?? "Módulo do sistema."} />}
+      <section className="p-5 lg:p-8">
+        {active === "Dashboard" && <Dashboard instruments={instruments} calibrations={calibrations} overdue={overdue} dueSoon={dueSoon} pendingAlerts={pendingAlerts} approved={approved} navigate={navigate} />}
+        {active === "Instrumentos" && <Instrumentos data={instruments} setData={setInstruments} search={search} setSearch={setSearch} />}
+        {active === "Calibração" && <Calibracoes instruments={instruments} data={calibrations} setData={setCalibrations} />}
+        {active === "Manutenção" && <GenericModule title="Manutenção" description="Abra, acompanhe e conclua intervenções nos instrumentos." data={maintenance} setData={setMaintenance} action="Nova manutenção" fields={["Instrumento", "Tipo de manutenção", "Responsável"]} />}
+        {active === "Movimentações" && <GenericModule title="Movimentações" description="Registre transferências entre setores, locais e responsáveis." data={movements} setData={setMovements} action="Nova movimentação" fields={["Instrumento", "Origem → Destino", "Responsável"]} />}
+        {active === "Padrões" && <GenericModule title="Padrões" description="Controle padrões, rastreabilidade e validade metrológica." data={standards} setData={setStandards} action="Novo padrão" fields={["Código do padrão", "Descrição", "Validade"]} />}
+        {active === "Certificados" && <GenericModule title="Certificados" description="Controle certificados vinculados aos instrumentos e padrões." data={certificates} setData={setCertificates} action="Novo certificado" fields={["Número do certificado", "Instrumento/Padrão", "Validade"]} />}
+        {active === "Não Conformidades" && <GenericModule title="Não Conformidades" description="Registre ocorrências, ações corretivas, responsáveis e encerramento." data={ncs} setData={setNcs} action="Nova NC" fields={["Título da NC", "Origem", "Responsável"]} statuses={["Aberta", "Em tratamento", "Concluída"]} />}
+        {active === "Alertas" && <Alerts instruments={instruments} certificates={certificates} ncs={ncs} />}
+        {active === "Indicadores" && <Indicators instruments={instruments} calibrations={calibrations} overdue={overdue} dueSoon={dueSoon} ncs={ncs} />}
+        {active === "Relatórios" && <Reports instruments={instruments} calibrations={calibrations} />}
+        {active === "Documentos" && <GenericModule title="Documentos" description="Organize procedimentos, certificados, registros e documentos do setor." data={documents} setData={setDocuments} action="Novo documento" fields={["Nome do documento", "Categoria", "Responsável"]} />}
+        {active === "Configurações" && <SettingsPage />}
       </section>
     </main>
   </div>;
 }
 
-function Dashboard({ instruments }: { instruments: string[] }) {
-  return <>
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Stat icon={Boxes} label="Instrumentos" value={String(instruments.length)} detail="Cadastrados"/><Stat icon={CalendarClock} label="Vencem este mês" value="0" detail="Calibrações"/><Stat icon={AlertTriangle} label="Vencidos" value="0" detail="Requerem atenção"/><Stat icon={CheckCircle2} label="Calibrados" value={String(instruments.length)} detail="Status atual"/></div>
-    <div className="grid gap-6 xl:grid-cols-[1.6fr_1fr]"><section className="rounded-2xl border border-white/10 bg-white/[0.03] p-6"><h2 className="font-semibold">Atividade de calibração</h2><p className="mt-1 text-sm text-slate-500">Acompanhe as calibrações registradas.</p><div className="mt-6 flex min-h-64 items-center justify-center rounded-xl border border-dashed border-white/10"><div className="text-center"><Activity className="mx-auto mb-3 h-8 w-8 text-slate-700"/><p className="text-sm text-slate-500">Nenhuma calibração registrada</p></div></div></section><section className="rounded-2xl border border-white/10 bg-white/[0.03] p-6"><h2 className="font-semibold">Status dos instrumentos</h2><div className="mt-6 space-y-3"><Row label="Calibrados" value={String(instruments.length)}/><Row label="A vencer" value="0"/><Row label="Vencidos" value="0"/><Row label="Em manutenção" value="0"/></div></section></div>
-    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-6"><h2 className="font-semibold">Próximas calibrações</h2><p className="mt-1 text-sm text-slate-500">Instrumentos que exigirão atenção em breve.</p><div className="mt-5 rounded-xl border border-dashed border-white/10 py-12 text-center text-sm text-slate-500">Nenhum instrumento pendente.</div></section>
-  </>;
+function Dashboard({ instruments, calibrations, overdue, dueSoon, pendingAlerts, approved, navigate }: any) {
+  const recent = [...calibrations].reverse().slice(0, 5);
+  return <div className="space-y-6">
+    <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><h2 className="text-2xl font-semibold">Visão geral</h2><p className="mt-1 text-sm text-slate-500">Acompanhe o parque metrológico e as pendências do setor.</p></div><button onClick={() => navigate("Instrumentos")} className="inline-flex items-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium hover:bg-violet-500"><Plus className="h-4 w-4" />Cadastrar instrumento</button></div>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Stat icon={Boxes} label="Instrumentos" value={instruments.length} detail="cadastrados" /><Stat icon={CalendarClock} label="Próximos 30 dias" value={dueSoon} detail="calibrações" /><Stat icon={AlertTriangle} label="Vencidos" value={overdue} detail="requerem atenção" /><Stat icon={Bell} label="Pendências" value={pendingAlerts} detail="alertas ativos" /></div>
+    <div className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
+      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-6"><div className="flex items-center justify-between"><div><h2 className="font-semibold">Atividade de calibração</h2><p className="mt-1 text-sm text-slate-500">Últimos registros</p></div><button onClick={() => navigate("Calibração")} className="text-xs text-violet-400 hover:text-violet-300">Ver tudo</button></div>{recent.length ? <div className="mt-5 space-y-2">{recent.map((x: any) => <div key={x.id} className="flex items-center justify-between rounded-xl border border-white/5 bg-black/10 px-4 py-3"><div><div className="text-sm font-medium">{x.instrument}</div><div className="text-xs text-slate-500">{x.date} · {x.technician || "Sem responsável"}</div></div><span className={`rounded-full px-2.5 py-1 text-xs ${x.result === "Aprovado" ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"}`}>{x.result}</span></div>)}</div> : <Empty text="Nenhuma calibração registrada" />}</section>
+      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-6"><h2 className="font-semibold">Status dos instrumentos</h2><div className="mt-5 space-y-3"><Row label="Ativos" value={instruments.filter((x: any) => x.status === "Ativo").length} /><Row label="Em manutenção" value={instruments.filter((x: any) => x.status === "Manutenção").length} /><Row label="Calibrações aprovadas" value={approved} /><Row label="Total de calibrações" value={calibrations.length} /></div></section>
+    </div>
+  </div>;
 }
 
-function Instrumentos({ instruments, showForm, setShowForm, name, setName, addInstrument, search, setSearch }: any) {
-  const filtered = instruments.filter((x: string) => x.toLowerCase().includes(search.toLowerCase()));
-  return <div className="space-y-5"><div className="flex flex-col justify-between gap-4 sm:flex-row"><div><h2 className="text-lg font-semibold">Cadastro de instrumentos</h2><p className="text-sm text-slate-500">Adicione instrumentos ao parque metrológico.</p></div><button onClick={() => setShowForm(true)} className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium hover:bg-violet-500"><Plus className="h-4 w-4"/>Novo instrumento</button></div><div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"><Search className="h-4 w-4 text-slate-500"/><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar instrumento..." className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600"/></div>{showForm && <div className="rounded-2xl border border-violet-500/30 bg-white/[0.04] p-5"><div className="flex gap-3"><input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addInstrument()} placeholder="Nome ou código do instrumento" className="flex-1 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm outline-none focus:border-violet-500"/><button onClick={addInstrument} className="rounded-lg bg-violet-600 px-4 text-sm font-medium">Salvar</button><button onClick={() => setShowForm(false)} className="rounded-lg border border-white/10 px-4 text-sm">Cancelar</button></div></div>}<div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]"><div className="border-b border-white/10 px-5 py-4 text-sm text-slate-400">{filtered.length} instrumento(s)</div>{filtered.length ? filtered.map((item: string, i: number) => <div key={`${item}-${i}`} className="flex items-center justify-between border-b border-white/5 px-5 py-4 last:border-0"><span>{item}</span><span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-400">Ativo</span></div>) : <div className="py-14 text-center text-sm text-slate-500">Nenhum instrumento cadastrado.</div>}</div></div>;
+function Instrumentos({ data, setData, search, setSearch }: any) {
+  const [form, setForm] = useState(false); const [edit, setEdit] = useState<Instrument | null>(null);
+  const [draft, setDraft] = useState({ code: "", name: "", sector: "", status: "Ativo" as Instrument["status"], nextCalibration: "" });
+  const filtered = data.filter((x: Instrument) => `${x.code} ${x.name} ${x.sector}`.toLowerCase().includes(search.toLowerCase()));
+  const openNew = () => { setEdit(null); setDraft({ code: "", name: "", sector: "", status: "Ativo", nextCalibration: "" }); setForm(true); };
+  const openEdit = (x: Instrument) => { setEdit(x); setDraft(x); setForm(true); };
+  const save = () => { if (!draft.code.trim() || !draft.name.trim()) return; if (edit) setData(data.map((x: Instrument) => x.id === edit.id ? { ...edit, ...draft } : x)); else setData([...data, { ...draft, id: Date.now() }]); setForm(false); };
+  return <div className="space-y-5"><ModuleHeader title="Instrumentos" description="Cadastro e acompanhamento do parque metrológico." action="Novo instrumento" onAction={openNew} /><div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2"><Search className="h-4 w-4 text-slate-500" /><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar por código, nome ou setor..." className="w-full bg-transparent text-sm outline-none placeholder:text-slate-600" /></div>{form && <InstrumentForm draft={draft} setDraft={setDraft} onSave={save} onCancel={() => setForm(false)} />}<div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]"><div className="grid grid-cols-[1fr_1.6fr_1fr_120px_120px] border-b border-white/10 px-5 py-3 text-xs uppercase tracking-wider text-slate-600"><span>Código</span><span>Instrumento</span><span>Setor</span><span>Próxima calibração</span><span>Status</span></div>{filtered.length ? filtered.map((x: Instrument) => <div key={x.id} onDoubleClick={() => openEdit(x)} className="grid cursor-pointer grid-cols-[1fr_1.6fr_1fr_120px_120px] items-center border-b border-white/5 px-5 py-4 text-sm last:border-0 hover:bg-white/[0.025]"><span className="font-medium">{x.code}</span><span>{x.name}</span><span className="text-slate-400">{x.sector || "—"}</span><span className="text-slate-400">{x.nextCalibration || "—"}</span><span><span className={`rounded-full px-2.5 py-1 text-xs ${x.status === "Ativo" ? "bg-emerald-500/10 text-emerald-400" : x.status === "Manutenção" ? "bg-amber-500/10 text-amber-400" : "bg-slate-500/10 text-slate-400"}`}>{x.status}</span></span></div>) : <div className="py-16 text-center text-sm text-slate-500">Nenhum instrumento cadastrado.</div>}</div><p className="text-xs text-slate-600">Dica: dê duplo clique em um instrumento para editar.</p></div>;
 }
 
-function ModulePage({ title, description }: { title: string; description: string }) { return <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8"><div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-violet-600/15"><Gauge className="h-6 w-6 text-violet-400"/></div><h2 className="text-xl font-semibold">{title}</h2><p className="mt-2 max-w-xl text-sm leading-6 text-slate-400">{description}</p><div className="mt-8 rounded-xl border border-dashed border-white/10 py-12 text-center text-sm text-slate-500">Módulo pronto para receber os dados e operações.</div></div> }
-function Stat({ icon: Icon, label, value, detail }: { icon: any; label: string; value: string; detail: string }) { return <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"><div className="mb-5 flex items-center justify-between"><span className="text-sm text-slate-400">{label}</span><Icon className="h-5 w-5 text-violet-400"/></div><div className="text-3xl font-semibold">{value}</div><div className="mt-1 text-xs text-slate-600">{detail}</div></div> }
-function Row({ label, value }: { label: string; value: string }) { return <div className="flex items-center justify-between rounded-xl border border-white/5 bg-black/10 px-4 py-3"><span className="text-sm text-slate-400">{label}</span><span className="font-semibold">{value}</span></div> }
+function InstrumentForm({ draft, setDraft, onSave, onCancel }: any) { return <div className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.04] p-5"><div className="mb-4 flex items-center justify-between"><h3 className="font-semibold">Dados do instrumento</h3><button onClick={onCancel}><X className="h-4 w-4 text-slate-500" /></button></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Input label="Código *" value={draft.code} onChange={(v: string) => setDraft({ ...draft, code: v })} placeholder="Ex.: TERM-001" /><Input label="Descrição *" value={draft.name} onChange={(v: string) => setDraft({ ...draft, name: v })} placeholder="Termômetro digital" /><Input label="Setor" value={draft.sector} onChange={(v: string) => setDraft({ ...draft, sector: v })} placeholder="Produção" /><Input label="Próxima calibração" type="date" value={draft.nextCalibration} onChange={(v: string) => setDraft({ ...draft, nextCalibration: v })} /><label className="text-xs text-slate-500">Status<select value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value })} className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-200"><option>Ativo</option><option>Manutenção</option><option>Inativo</option></select></label></div><div className="mt-4 flex justify-end gap-2"><button onClick={onCancel} className="rounded-lg border border-white/10 px-4 py-2 text-sm">Cancelar</button><button onClick={onSave} className="rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium">Salvar instrumento</button></div></div> }
+
+function Calibracoes({ instruments, data, setData }: any) { const [form, setForm] = useState(false); const [draft, setDraft] = useState({ instrument: "", date: today, result: "Aprovado" as Calibration["result"], nextDate: "", technician: "" }); const save = () => { if (!draft.instrument) return; setData([...data, { ...draft, id: Date.now() }]); setForm(false); setDraft({ instrument: "", date: today, result: "Aprovado", nextDate: "", technician: "" }); }; return <div className="space-y-5"><ModuleHeader title="Calibração" description="Registre resultados, responsáveis e próxima calibração." action="Nova calibração" onAction={() => setForm(true)} />{form && <div className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.04] p-5"><h3 className="mb-4 font-semibold">Registrar calibração</h3><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><label className="text-xs text-slate-500">Instrumento<select value={draft.instrument} onChange={(e) => setDraft({ ...draft, instrument: e.target.value })} className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm"><option value="">Selecione...</option>{instruments.map((x: Instrument) => <option key={x.id}>{x.code} — {x.name}</option>)}</select></label><Input label="Data" type="date" value={draft.date} onChange={(v: string) => setDraft({ ...draft, date: v })} /><label className="text-xs text-slate-500">Resultado<select value={draft.result} onChange={(e) => setDraft({ ...draft, result: e.target.value })} className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm"><option>Aprovado</option><option>Reprovado</option></select></label><Input label="Próxima data" type="date" value={draft.nextDate} onChange={(v: string) => setDraft({ ...draft, nextDate: v })} /><Input label="Técnico" value={draft.technician} onChange={(v: string) => setDraft({ ...draft, technician: v })} /></div><div className="mt-4 flex justify-end gap-2"><button onClick={() => setForm(false)} className="rounded-lg border border-white/10 px-4 py-2 text-sm">Cancelar</button><button onClick={save} className="rounded-lg bg-violet-600 px-4 py-2 text-sm">Registrar</button></div></div>}<div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]"><div className="grid grid-cols-[1.6fr_100px_100px_120px_1fr] border-b border-white/10 px-5 py-3 text-xs uppercase tracking-wider text-slate-600"><span>Instrumento</span><span>Data</span><span>Resultado</span><span>Próxima</span><span>Técnico</span></div>{data.length ? data.map((x: Calibration) => <div key={x.id} className="grid grid-cols-[1.6fr_100px_100px_120px_1fr] items-center border-b border-white/5 px-5 py-4 text-sm last:border-0"><span>{x.instrument}</span><span className="text-slate-400">{x.date}</span><span className={x.result === "Aprovado" ? "text-emerald-400" : "text-red-400"}>{x.result}</span><span className="text-slate-400">{x.nextDate || "—"}</span><span className="text-slate-400">{x.technician || "—"}</span></div>) : <div className="py-16 text-center text-sm text-slate-500">Nenhuma calibração registrada.</div>}</div></div> }
+
+function GenericModule({ title, description, data, setData, action, fields, statuses = ["Aberta", "Em andamento", "Concluída"] }: any) { const [form, setForm] = useState(false); const [values, setValues] = useState<Record<string, string>>({}); const save = () => { if (!values[fields[0]]) return; setData([...data, { id: Date.now(), title: values[fields[0]], detail: fields.slice(1).map((f: string) => values[f]).filter(Boolean).join(" · "), status: statuses[0], date: today }]); setValues({}); setForm(false); }; const remove = (id: number) => setData(data.filter((x: RecordItem) => x.id !== id)); return <div className="space-y-5"><ModuleHeader title={title} description={description} action={action} onAction={() => setForm(true)} />{form && <div className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.04] p-5"><h3 className="mb-4 font-semibold">{action}</h3><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{fields.map((f: string) => <Input key={f} label={f} value={values[f] || ""} onChange={(v: string) => setValues({ ...values, [f]: v })} />)}</div><div className="mt-4 flex justify-end gap-2"><button onClick={() => setForm(false)} className="rounded-lg border border-white/10 px-4 py-2 text-sm">Cancelar</button><button onClick={save} className="rounded-lg bg-violet-600 px-4 py-2 text-sm">Salvar</button></div></div>}<div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]"><div className="border-b border-white/10 px-5 py-3 text-xs text-slate-500">{data.length} registro(s)</div>{data.length ? data.map((x: RecordItem) => <div key={x.id} className="flex items-center gap-4 border-b border-white/5 px-5 py-4 last:border-0"><div className="min-w-0 flex-1"><div className="font-medium">{x.title}</div><div className="mt-1 text-xs text-slate-500">{x.detail || "Sem detalhes"} · {x.date}</div></div><select value={x.status} onChange={(e) => setData(data.map((r: RecordItem) => r.id === x.id ? { ...r, status: e.target.value } : r))} className="rounded-lg border border-white/10 bg-slate-950 px-2 py-1.5 text-xs"><option>{x.status}</option>{statuses.filter((s: string) => s !== x.status).map((s: string) => <option key={s}>{s}</option>)}</select><button onClick={() => remove(x.id)} className="rounded-lg p-2 text-slate-600 hover:bg-red-500/10 hover:text-red-400"><Trash2 className="h-4 w-4" /></button></div>) : <Empty text="Nenhum registro cadastrado" />}</div></div> }
+
+function Alerts({ instruments, certificates, ncs }: any) { const alerts = [...instruments.filter((x: Instrument) => x.nextCalibration && x.nextCalibration < today).map((x: Instrument) => ({ title: `Calibração vencida — ${x.code}`, detail: x.name, type: "Crítico" })), ...certificates.filter((x: RecordItem) => x.status === "Vencendo").map((x: RecordItem) => ({ title: `Certificado vencendo — ${x.title}`, detail: x.detail, type: "Atenção" })), ...ncs.filter((x: RecordItem) => x.status !== "Concluída").map((x: RecordItem) => ({ title: `NC pendente — ${x.title}`, detail: x.detail, type: "Atenção" }))]; return <div className="space-y-5"><ModuleHeader title="Alertas" description="Pendências que precisam de acompanhamento." action="Atualizar" onAction={() => window.location.reload()} /><div className="space-y-2">{alerts.length ? alerts.map((x, i) => <div key={i} className="flex items-center gap-4 rounded-xl border border-white/10 bg-white/[0.03] px-5 py-4"><AlertTriangle className="h-5 w-5 text-amber-400" /><div className="flex-1"><div className="text-sm font-medium">{x.title}</div><div className="text-xs text-slate-500">{x.detail}</div></div><span className="rounded-full bg-amber-500/10 px-2.5 py-1 text-xs text-amber-400">{x.type}</span></div>) : <Empty text="Nenhum alerta ativo" />}</div></div> }
+
+function Indicators({ instruments, calibrations, overdue, dueSoon, ncs }: any) { const approvalRate = calibrations.length ? Math.round(calibrations.filter((x: Calibration) => x.result === "Aprovado").length / calibrations.length * 100) : 0; const max = Math.max(instruments.length, calibrations.length, ncs.length, 1); const bars = [["Instrumentos", instruments.length], ["Calibrações", calibrations.length], ["Vencidos", overdue], ["Próximos 30 dias", dueSoon], ["NCs", ncs.length]]; return <div className="space-y-5"><ModuleHeader title="Indicadores" description="Visão quantitativa do desempenho metrológico." /><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"><Stat icon={Gauge} label="Taxa de aprovação" value={`${approvalRate}%`} detail="calibrações" /><Stat icon={ClipboardCheck} label="Calibrações" value={calibrations.length} detail="registradas" /><Stat icon={AlertTriangle} label="Vencidos" value={overdue} detail="instrumentos" /><Stat icon={CheckCircle2} label="Instrumentos" value={instruments.length} detail="no parque" /></div><section className="rounded-2xl border border-white/10 bg-white/[0.03] p-6"><h2 className="font-semibold">Volume por indicador</h2><div className="mt-6 space-y-5">{bars.map(([label, value]) => <div key={label}><div className="mb-2 flex justify-between text-sm"><span className="text-slate-400">{label}</span><b>{value}</b></div><div className="h-2 overflow-hidden rounded-full bg-white/5"><div className="h-full rounded-full bg-gradient-to-r from-violet-600 to-blue-500" style={{ width: `${Math.max(3, Number(value) / max * 100)}%` }} /></div></div>)}</div></section></div> }
+
+function Reports({ instruments, calibrations }: any) { const exportCsv = () => { const rows = [["Código", "Instrumento", "Setor", "Status", "Próxima calibração"], ...instruments.map((x: Instrument) => [x.code, x.name, x.sector, x.status, x.nextCalibration])]; const csv = rows.map((r) => r.map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(",")).join("\n"); const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = `relatorio-instrumentos-${today}.csv`; a.click(); URL.revokeObjectURL(url); }; return <div className="space-y-5"><ModuleHeader title="Relatórios" description="Gere uma visão consolidada dos dados do setor." action="Exportar CSV" onAction={exportCsv} /><div className="grid gap-4 sm:grid-cols-2"><ReportCard title="Parque de instrumentos" value={instruments.length} detail="registros disponíveis" onClick={exportCsv} /><ReportCard title="Histórico de calibrações" value={calibrations.length} detail="registros disponíveis" /></div><div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6"><h2 className="font-semibold">Prévia</h2><p className="mt-1 text-sm text-slate-500">O relatório de instrumentos pode ser exportado para Excel/CSV e aberto no Excel.</p></div></div> }
+
+function SettingsPage() { return <div className="space-y-5"><ModuleHeader title="Configurações" description="Preferências básicas do sistema de Instrumentação." /><div className="grid gap-4 lg:grid-cols-2"><section className="rounded-2xl border border-white/10 bg-white/[0.03] p-6"><h2 className="font-semibold">Sistema</h2><div className="mt-5 space-y-3"><Row label="Unidade de temperatura" value="°C" /><Row label="Formato de data" value="DD/MM/AAAA" /><Row label="Periodicidade padrão" value="12 meses" /></div></section><section className="rounded-2xl border border-white/10 bg-white/[0.03] p-6"><h2 className="font-semibold">Interface</h2><div className="mt-5 space-y-3"><Row label="Tema" value="Escuro" /><Row label="Menu lateral" value="Expansível" /><Row label="Idioma" value="Português" /></div></section></div></div> }
+
+function ModuleHeader({ title, description, action, onAction }: any) { return <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h2 className="text-2xl font-semibold">{title}</h2><p className="mt-1 text-sm text-slate-500">{description}</p></div>{action && <button onClick={onAction} className="inline-flex items-center justify-center gap-2 rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium hover:bg-violet-500"><Plus className="h-4 w-4" />{action}</button>}</div> }
+function Input({ label, value, onChange, placeholder, type = "text" }: any) { return <label className="text-xs text-slate-500">{label}<input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-sm text-slate-200 outline-none focus:border-violet-500" /></label> }
+function Stat({ icon: Icon, label, value, detail }: any) { return <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"><div className="mb-5 flex items-center justify-between"><span className="text-sm text-slate-400">{label}</span><Icon className="h-5 w-5 text-violet-400" /></div><div className="text-3xl font-semibold">{value}</div><div className="mt-1 text-xs text-slate-600">{detail}</div></div> }
+function Row({ label, value }: any) { return <div className="flex items-center justify-between rounded-xl border border-white/5 bg-black/10 px-4 py-3"><span className="text-sm text-slate-400">{label}</span><span className="font-semibold">{value}</span></div> }
+function Empty({ text }: { text: string }) { return <div className="py-14 text-center text-sm text-slate-500">{text}.</div> }
+function ReportCard({ title, value, detail, onClick }: any) { return <button onClick={onClick} className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 text-left hover:border-violet-500/30"><div className="text-sm text-slate-400">{title}</div><div className="mt-3 text-3xl font-semibold">{value}</div><div className="mt-1 text-xs text-slate-600">{detail}</div><div className="mt-5 inline-flex items-center gap-2 text-xs text-violet-400"><Download className="h-3.5 w-3.5" />Exportar</div></button> }
