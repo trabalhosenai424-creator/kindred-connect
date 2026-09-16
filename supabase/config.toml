@@ -1,1 +1,4 @@
 project_id = "tbxnxebnfcakrqvrhulx"
+
+[functions.send-calibration-alerts]
+verify_jwt = false
